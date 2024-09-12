@@ -167,9 +167,9 @@ public:
 
 int main()
 {
-    bool gameAgainstCPU{true};
+    bool gameAgainstCPU{false};
     Ball ball{windowWidth / 2, windowHeight / 2, 20, WHITE, 9};
-    Player player1{20, float(windowHeight) / 2 - 100}, player2{float(windowWidth) - 60, float(windowHeight) / 2 - 100, 6};
+    Player player1{20, float(windowHeight) / 2 - 100}, player2{float(windowWidth) - 60, float(windowHeight) / 2 - 100, gameAgainstCPU ? 6 : 10};
 
     Color green{20, 160, 133, 255};
 
