@@ -1,9 +1,11 @@
+#include <cmath>
+#include <iostream>
 #include <raylib.h>
 #include <string>
-#include <iostream>
-#include <cmath>
 
 using namespace std;
+
+const int windowWidth{1200}, windowHeight{800};
 
 enum PlayerDirections
 {
@@ -17,14 +19,16 @@ class Player
 {
 public:
     int score{0};
-    int yPos;
+    float yPos;
     Rectangle rectangle;
+    int movementSpeed;
 
-    Player(int xPosition, int yPosition)
+    Player(float xPosition, float yPosition, int movementSpeed = 10)
     {
         xPos = xPosition;
         yPos = yPosition;
         rectangle = {float(xPos), float(yPos), 40, 200};
+        this->movementSpeed = movementSpeed;
     }
 
     void increaseScore()
@@ -32,21 +36,23 @@ public:
         score++;
     }
 
-    void move(PlayerDirections direction, int windowHeight)
+    void move(PlayerDirections direction, int windowHeight, int ballVerticalSpeed = -1)
     {
         switch (direction)
         {
         case DOWN:
-            if ((yPos + rectangle.height + 10) < windowHeight)
+            if ((yPos + rectangle.height + movementSpeed) < windowHeight)
             {
-                yPos += 10;
+                yPos += ballVerticalSpeed == -1 ? movementSpeed : ballVerticalSpeed < movementSpeed ? ballVerticalSpeed
+                                                                                                    : movementSpeed;
             }
             /* code */
             break;
         case UP:
-            if ((yPos - 10) > 0)
+            if ((yPos - movementSpeed) > 0)
             {
-                yPos -= 10;
+                yPos -= ballVerticalSpeed == -1 ? movementSpeed : ballVerticalSpeed < movementSpeed ? ballVerticalSpeed
+                                                                                                    : movementSpeed;
             }
             /* code */
             break;
@@ -57,8 +63,13 @@ public:
         rectangle.y = yPos;
     }
 
+    void setMoveSpeed(int movementSpeed)
+    {
+        this->movementSpeed = movementSpeed;
+    }
+
 private:
-    int xPos;
+    float xPos;
 };
 
 enum BallHorizontalDirections
@@ -84,6 +95,7 @@ public:
     Color color;
     int speed;
     int ySum;
+    float yPosEndDestination{-1};
     BallHorizontalDirections ballHorizontalDirection;
     BallVerticalDirections ballVerticalDirection;
 
@@ -99,11 +111,12 @@ public:
         ballHorizontalDirection = BALL_TO_LEFT;
     }
 
-    void resetPosition()
+    void resetPosition(bool gameAgainstCPU = false, int secondPlayerOffset = 0)
     {
         xPos = xInitialPos;
         yPos = yInitialPos;
         ySum = 0;
+        yPosEndDestination = -1;
     }
 
     void changeBallHorizontalDirection()
@@ -128,6 +141,8 @@ public:
         {
             ballVerticalDirection = BALL_TO_UP;
         }
+
+        // calculateYCoordinateDestination();
     }
 
     void bounce(Player player)
@@ -145,14 +160,16 @@ public:
         {
             ballVerticalDirection = BALL_TO_DOWN;
         }
+
+        // calculateYCoordinateDestination();
     }
 };
 
 int main()
 {
-    int windowWidth{800}, windowHeight{800};
+    bool gameAgainstCPU{true};
     Ball ball{windowWidth / 2, windowHeight / 2, 20, WHITE, 9};
-    Player player1{20, float(windowHeight) / 2 - 100}, player2{windowWidth - 60, float(windowHeight) / 2 - 100};
+    Player player1{20, float(windowHeight) / 2 - 100}, player2{float(windowWidth) - 60, float(windowHeight) / 2 - 100, 6};
 
     Color green{20, 160, 133, 255};
 
@@ -178,18 +195,59 @@ int main()
             player1.move(DOWN, windowHeight);
         }
 
-        // detect input
-        // up, down - player2
-        if (IsKeyDown(KEY_UP))
+        // Input handling
+        if (!gameAgainstCPU)
         {
-            player2.move(UP, windowHeight);
-        }
-        else if (IsKeyDown(KEY_DOWN))
-        {
-            player2.move(DOWN, windowHeight);
+            // detect input
+            // up, down - player2
+            if (IsKeyDown(KEY_UP))
+            {
+                player2.move(UP, windowHeight);
+            }
+            else if (IsKeyDown(KEY_DOWN))
+            {
+                player2.move(DOWN, windowHeight);
+            }
         }
 
         // update state
+        if (gameAgainstCPU)
+        {
+            int player2EndPos = player2.yPos + player2.rectangle.height;
+            int player2MiddlePos = player2.yPos + (player2.rectangle.height / 2);
+
+            if (ball.ballVerticalDirection == BALL_TO_UP)
+            {
+                if (ball.yPos < player2MiddlePos)
+                {
+                    player2.move(UP, windowHeight, ball.ySum);
+                }
+                else if (ball.yPos > player2MiddlePos)
+                {
+                    player2.move(DOWN, windowHeight, ball.ySum);
+                }
+                else
+                {
+                    player2.move(UP, windowHeight, ball.ySum);
+                }
+            }
+            else if (ball.ballVerticalDirection == BALL_TO_DOWN)
+            {
+                if (player2MiddlePos < ball.yPos)
+                {
+                    player2.move(DOWN, windowHeight, ball.ySum);
+                }
+                else if (player2MiddlePos > ball.yPos)
+                {
+                    player2.move(UP, windowHeight, ball.ySum);
+                }
+                else
+                {
+                    player2.move(DOWN, windowHeight, ball.ySum);
+                }
+            }
+        }
+
         if (ball.ballHorizontalDirection == BALL_TO_LEFT)
         {
             ball.xPos += ball.speed;
@@ -202,17 +260,26 @@ int main()
         if (ball.ballVerticalDirection == BALL_TO_UP)
         {
             ball.yPos -= ball.ySum;
+            if (gameAgainstCPU && ball.yPosEndDestination > 0)
+            {
+                ball.yPosEndDestination--;
+            }
         }
         else if (ball.ballVerticalDirection == BALL_TO_DOWN)
         {
             ball.yPos += ball.ySum;
+            if (gameAgainstCPU && ball.yPosEndDestination > 0)
+            {
+                ball.yPosEndDestination--;
+            }
         }
 
-        if (ball.yPos > windowHeight)
+        // Colision vertical
+        if ((ball.yPos + ball.radius) > windowHeight)
         {
             ball.changeBallVerticalDirection();
         }
-        else if (ball.yPos < 0)
+        else if ((ball.yPos - ball.radius) < 0)
         {
             ball.changeBallVerticalDirection();
         }
@@ -221,6 +288,7 @@ int main()
         bool isThePlayer1CollidingWithTheBall = CheckCollisionCircleRec(Vector2{float(ball.xPos), float(ball.yPos)}, ball.radius, player1.rectangle);
         bool isThePlayer2CollidingWithTheBall = CheckCollisionCircleRec(Vector2{float(ball.xPos), float(ball.yPos)}, ball.radius, player2.rectangle);
 
+        // Colision horizontal
         if (isThePlayer1CollidingWithTheBall)
         {
             ball.bounce(player1);
